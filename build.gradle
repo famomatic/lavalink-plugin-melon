@@ -5,7 +5,7 @@ plugins {
     id "com.github.johnrengelman.shadow" version "7.1.0"
 }
 
-group "org.example"
+group "cafe.cocochino"
 version "0.1.0"
 mainClassName = "org.springframework.boot.loader.JarLauncher"
 sourceCompatibility = 11
@@ -23,7 +23,7 @@ repositories {
 dependencies {
     compileOnly "dev.arbjerg.lavalink:plugin-api:3.6.1"
     // It is recommended to update this version. This commit is from October 17th 2022
-    runtimeOnly "com.github.freyacodes.lavalink:Lavalink-Server:3ead3be0"
+    //runtimeOnly "com.github.freyacodes.lavalink:Lavalink-Server:3ead3be0"
 }
 
 shadowJar {
