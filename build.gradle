@@ -20,6 +20,7 @@ repositories {
 
 dependencies {
     compileOnly "dev.arbjerg.lavalink:plugin-api:4.1.1"
+    implementation "org.jsoup:jsoup:1.17.2"
 }
 
 shadowJar {

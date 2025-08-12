@@ -14,7 +14,10 @@ import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.utils.URIBuilder;
 import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.util.EntityUtils;
-
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.select.Elements;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.io.DataInput;
@@ -25,6 +28,7 @@ import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.regex.Matcher;
@@ -41,6 +45,8 @@ public class MelonAudioSourceManager implements AudioSourceManager, HttpConfigur
     private final String MELON_SONG_INFO_REGEX = "https://www\\.melon\\.com/song/detail\\.htm\\?songId=(\\d+)";
     private final Pattern melonSongPattern = Pattern.compile(MELON_SONG_INFO_REGEX);
 
+    private AudioPlayerManager playerManager;
+
     public MelonAudioSourceManager() {}
 
     @Override
@@ -51,6 +57,7 @@ public class MelonAudioSourceManager implements AudioSourceManager, HttpConfigur
     @Override
     public AudioItem loadItem(AudioPlayerManager manager, AudioReference reference) {
         try {
+            this.playerManager = manager;
             // msearch:Query
             if (reference.identifier.startsWith(SEARCH_PREFIX)) {
                 return this.getSearch(reference.identifier.substring(SEARCH_PREFIX.length()).trim());
@@ -77,12 +84,21 @@ public class MelonAudioSourceManager implements AudioSourceManager, HttpConfigur
 
     @Override
     public void encodeTrack(AudioTrack track, DataOutput output) throws IOException {
-
+        if (track instanceof MelonAudioTrack melonTrack) {
+            output.writeUTF(melonTrack.getArtworkURL() != null ? melonTrack.getArtworkURL() : "");
+        } else {
+            output.writeUTF("");
+        }
     }
 
     @Override
     public AudioTrack decodeTrack(AudioTrackInfo trackInfo, DataInput input) throws IOException {
-        return null;
+        String artwork = input.readUTF();
+        return new MelonAudioTrack(trackInfo, artwork, this);
+    }
+
+    public AudioPlayerManager getPlayerManager() {
+        return this.playerManager;
     }
 
     @Override
@@ -106,16 +122,17 @@ public class MelonAudioSourceManager implements AudioSourceManager, HttpConfigur
 
 
     private AudioItem getSearch(String query) throws Exception {
-        // Create request instance
         HttpGet searchRequest = new HttpGet(MELON_SEARCH_URL);
-        URI qs = new URIBuilder(searchRequest.getURI()) // Create QueryString Builder
+        URI qs = new URIBuilder(searchRequest.getURI())
                 .setParameter("q", urlEncodeUTF8(query))
                 .build();
-        searchRequest.setURI(qs); // Set QueryString
+        searchRequest.setURI(qs);
+        searchRequest.setHeader("User-Agent", "Mozilla/5.0");
+        searchRequest.setHeader("Referer", "https://www.melon.com/");
 
         var searchResBody = this.fetchBody(searchRequest);
-        log.info(searchResBody);
-        return new BasicAudioPlaylist("Search results for: " + query, new ArrayList<AudioTrack>(), null, true);
+        List<AudioTrack> tracks = parseSearchResults(searchResBody);
+        return new BasicAudioPlaylist("Search results for: " + query, tracks, null, true);
     }
 
     private AudioItem getPlay(AudioPlayerManager manager, String query) throws Exception {
@@ -130,18 +147,59 @@ public class MelonAudioSourceManager implements AudioSourceManager, HttpConfigur
         return new AudioReference("ytsearch:" + query, null);
     }
 
-    private AudioItem getItem(int songNumber) {
-        log.info(String.format("%d", songNumber));
-        return null;
+    private AudioItem getItem(int songNumber) throws Exception {
+        String url = String.format("https://www.melon.com/song/detail.htm?songId=%d", songNumber);
+        HttpGet get = new HttpGet(url);
+        get.setHeader("User-Agent", "Mozilla/5.0");
+        get.setHeader("Referer", "https://www.melon.com/");
+
+        var body = this.fetchBody(get);
+        AudioTrack track = parseTrackFromDetails(body, songNumber, url);
+        return track;
     }
 
-//    private AudioTrack parseTrackFromDetails(String detailsHtml) {
-//        return;
-//    }
-//
-//    private List<AudioTrack> parseSearchResults(String searchResultHtml) {
-//        return;
-//    }
+    private AudioTrack parseTrackFromDetails(String detailsHtml, int songNumber, String url) {
+        Document doc = Jsoup.parse(detailsHtml);
+        String title = doc.selectFirst("meta[property=og:title]") != null ?
+                doc.selectFirst("meta[property=og:title]").attr("content") : "";
+        String artist = "";
+        Element artistMeta = doc.selectFirst("meta[property=og:author]");
+        if (artistMeta != null) {
+            artist = artistMeta.attr("content");
+        } else {
+            Element desc = doc.selectFirst("meta[property=og:description]");
+            if (desc != null) {
+                String content = desc.attr("content");
+                int idx = content.indexOf("|");
+                if (idx > 0) {
+                    artist = content.substring(0, idx).trim();
+                } else {
+                    artist = content;
+                }
+            }
+        }
+        String artwork = doc.selectFirst("meta[property=og:image]") != null ?
+                doc.selectFirst("meta[property=og:image]").attr("content") : "";
+        return createTrack(title, artist, String.valueOf(songNumber), url, artwork);
+    }
+
+    private List<AudioTrack> parseSearchResults(String searchResultHtml) {
+        List<AudioTrack> tracks = new ArrayList<>();
+        Document doc = Jsoup.parse(searchResultHtml);
+        Elements rows = doc.select("div.service_list_song table tbody tr[data-song-no]");
+        for (Element row : rows) {
+            String songId = row.attr("data-song-no");
+            String title = row.selectFirst("div.ellipsis.rank01 a") != null
+                    ? row.selectFirst("div.ellipsis.rank01 a").text() : "";
+            String artist = row.selectFirst("div.ellipsis.rank02 span a") != null
+                    ? row.selectFirst("div.ellipsis.rank02 span a").text() : "";
+            String artwork = row.selectFirst("a.image_typeAll img") != null
+                    ? row.selectFirst("a.image_typeAll img").attr("src") : "";
+            String uri = "https://www.melon.com/song/detail.htm?songId=" + songId;
+            tracks.add(createTrack(title, artist, songId, uri, artwork));
+        }
+        return tracks;
+    }
 
     private AudioTrack createTrack(String title, String artist, String identifier, String uri, String artworkURL) {
         return new MelonAudioTrack(
