@@ -12,6 +12,7 @@ import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.utils.URIBuilder;
+import org.apache.http.impl.client.BasicCookieStore;
 import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.util.EntityUtils;
 import org.jsoup.Jsoup;
@@ -27,6 +28,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.regex.Matcher;
@@ -40,14 +42,19 @@ public class MelonAudioSourceManager implements AudioSourceManager, HttpConfigur
     private final String SEARCH_PREFIX = "msearch:";
     private final String PLAY_PREFIX = "mplay:";
     private final String MELON_SEARCH_URL = "https://www.melon.com/search/song/index.htm";
+    private final String MELON_BASE_URL = "https://www.melon.com/";
     private final String MELON_SONG_INFO_REGEX = "https://www\\.melon\\.com/song/detail\\.htm\\?songId=(\\d+)";
     private final String MELON_ALBUM_INFO_REGEX = "https://www\\.melon\\.com/album/detail\\.htm\\?albumId=(\\d+)";
     private final Pattern melonSongPattern = Pattern.compile(MELON_SONG_INFO_REGEX);
     private final Pattern melonAlbumPattern = Pattern.compile(MELON_ALBUM_INFO_REGEX);
 
     private AudioPlayerManager playerManager;
+    private final AtomicBoolean sessionInitialized = new AtomicBoolean(false);
 
-    public MelonAudioSourceManager() {}
+    public MelonAudioSourceManager() {
+        this.httpInterfaceManager.configureBuilder(builder ->
+                builder.setDefaultCookieStore(new BasicCookieStore()));
+    }
 
     @Override
     public String getSourceName() {
@@ -241,6 +248,9 @@ public class MelonAudioSourceManager implements AudioSourceManager, HttpConfigur
     }
 
     private String fetchBody(HttpGet httpRequest) throws IOException {
+        if (sessionInitialized.compareAndSet(false, true)) {
+            initSession();
+        }
         CloseableHttpResponse response = httpInterfaceManager.getInterface().execute(httpRequest); // Get page data
         int statusCode = response.getStatusLine().getStatusCode();
         if (statusCode != 200) { // Not OK
@@ -250,6 +260,14 @@ public class MelonAudioSourceManager implements AudioSourceManager, HttpConfigur
 
         HttpEntity httpEntity = response.getEntity();
         return EntityUtils.toString(httpEntity, "UTF-8");
+    }
+
+    private void initSession() throws IOException {
+        HttpGet get = new HttpGet(MELON_BASE_URL);
+        get.setHeader("User-Agent", "Mozilla/5.0");
+        CloseableHttpResponse response = httpInterfaceManager.getInterface().execute(get);
+        EntityUtils.consume(response.getEntity());
+        response.close();
     }
 
 }
