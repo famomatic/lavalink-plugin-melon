@@ -25,8 +25,6 @@ import java.io.DataOutput;
 import java.io.IOException;
 
 import java.net.URI;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
@@ -43,7 +41,9 @@ public class MelonAudioSourceManager implements AudioSourceManager, HttpConfigur
     private final String PLAY_PREFIX = "mplay:";
     private final String MELON_SEARCH_URL = "https://www.melon.com/search/song/index.htm";
     private final String MELON_SONG_INFO_REGEX = "https://www\\.melon\\.com/song/detail\\.htm\\?songId=(\\d+)";
+    private final String MELON_ALBUM_INFO_REGEX = "https://www\\.melon\\.com/album/detail\\.htm\\?albumId=(\\d+)";
     private final Pattern melonSongPattern = Pattern.compile(MELON_SONG_INFO_REGEX);
+    private final Pattern melonAlbumPattern = Pattern.compile(MELON_ALBUM_INFO_REGEX);
 
     private AudioPlayerManager playerManager;
 
@@ -66,10 +66,16 @@ public class MelonAudioSourceManager implements AudioSourceManager, HttpConfigur
             if (reference.identifier.startsWith(PLAY_PREFIX)) {
                 return this.getPlay(manager, reference.identifier.substring(PLAY_PREFIX.length()).trim());
             }
-            // Melon URL
+            // Melon Song URL
             Matcher matcher = melonSongPattern.matcher(reference.identifier);
             if (matcher.find() && !matcher.group(1).equals("")) {
                 return this.getItem(Integer.parseInt(matcher.group(1)));
+            }
+
+            // Melon Album URL
+            matcher = melonAlbumPattern.matcher(reference.identifier);
+            if (matcher.find() && !matcher.group(1).equals("")) {
+                return this.getAlbum(Integer.parseInt(matcher.group(1)));
             }
         } catch (Exception exception) {
             throw new RuntimeException(exception);
@@ -124,7 +130,7 @@ public class MelonAudioSourceManager implements AudioSourceManager, HttpConfigur
     private AudioItem getSearch(String query) throws Exception {
         HttpGet searchRequest = new HttpGet(MELON_SEARCH_URL);
         URI qs = new URIBuilder(searchRequest.getURI())
-                .setParameter("q", urlEncodeUTF8(query))
+                .setParameter("q", query)
                 .build();
         searchRequest.setURI(qs);
         searchRequest.setHeader("User-Agent", "Mozilla/5.0");
@@ -158,6 +164,20 @@ public class MelonAudioSourceManager implements AudioSourceManager, HttpConfigur
         return track;
     }
 
+    private AudioItem getAlbum(int albumNumber) throws Exception {
+        String url = String.format("https://www.melon.com/album/detail.htm?albumId=%d", albumNumber);
+        HttpGet get = new HttpGet(url);
+        get.setHeader("User-Agent", "Mozilla/5.0");
+        get.setHeader("Referer", "https://www.melon.com/");
+
+        var body = this.fetchBody(get);
+        Document doc = Jsoup.parse(body);
+        String title = doc.selectFirst("meta[property=og:title]") != null ?
+                doc.selectFirst("meta[property=og:title]").attr("content") : "Album " + albumNumber;
+        List<AudioTrack> tracks = parseTrackRows(doc);
+        return new BasicAudioPlaylist(title, tracks, null, false);
+    }
+
     private AudioTrack parseTrackFromDetails(String detailsHtml, int songNumber, String url) {
         Document doc = Jsoup.parse(detailsHtml);
         String title = doc.selectFirst("meta[property=og:title]") != null ?
@@ -184,9 +204,13 @@ public class MelonAudioSourceManager implements AudioSourceManager, HttpConfigur
     }
 
     private List<AudioTrack> parseSearchResults(String searchResultHtml) {
-        List<AudioTrack> tracks = new ArrayList<>();
         Document doc = Jsoup.parse(searchResultHtml);
-        Elements rows = doc.select("div.service_list_song table tbody tr[data-song-no]");
+        return parseTrackRows(doc);
+    }
+
+    private List<AudioTrack> parseTrackRows(Document doc) {
+        List<AudioTrack> tracks = new ArrayList<>();
+        Elements rows = doc.select("tr[data-song-no]");
         for (Element row : rows) {
             String songId = row.attr("data-song-no");
             String title = row.selectFirst("div.ellipsis.rank01 a") != null
@@ -228,7 +252,4 @@ public class MelonAudioSourceManager implements AudioSourceManager, HttpConfigur
         return EntityUtils.toString(httpEntity, "UTF-8");
     }
 
-    private String urlEncodeUTF8(String str) {
-        return URLEncoder.encode(str, StandardCharsets.UTF_8);
-    }
 }
