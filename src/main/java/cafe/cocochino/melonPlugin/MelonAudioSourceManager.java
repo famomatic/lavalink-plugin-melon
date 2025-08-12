@@ -140,8 +140,7 @@ public class MelonAudioSourceManager implements AudioSourceManager, HttpConfigur
                 .setParameter("q", query)
                 .build();
         searchRequest.setURI(qs);
-        searchRequest.setHeader("User-Agent", "Mozilla/5.0");
-        searchRequest.setHeader("Referer", "https://www.melon.com/");
+        applyDefaultHeaders(searchRequest);
 
         var searchResBody = this.fetchBody(searchRequest);
         List<AudioTrack> tracks = parseSearchResults(searchResBody);
@@ -163,8 +162,7 @@ public class MelonAudioSourceManager implements AudioSourceManager, HttpConfigur
     private AudioItem getItem(int songNumber) throws Exception {
         String url = String.format("https://www.melon.com/song/detail.htm?songId=%d", songNumber);
         HttpGet get = new HttpGet(url);
-        get.setHeader("User-Agent", "Mozilla/5.0");
-        get.setHeader("Referer", "https://www.melon.com/");
+        applyDefaultHeaders(get);
 
         var body = this.fetchBody(get);
         AudioTrack track = parseTrackFromDetails(body, songNumber, url);
@@ -174,8 +172,7 @@ public class MelonAudioSourceManager implements AudioSourceManager, HttpConfigur
     private AudioItem getAlbum(int albumNumber) throws Exception {
         String url = String.format("https://www.melon.com/album/detail.htm?albumId=%d", albumNumber);
         HttpGet get = new HttpGet(url);
-        get.setHeader("User-Agent", "Mozilla/5.0");
-        get.setHeader("Referer", "https://www.melon.com/");
+        applyDefaultHeaders(get);
 
         var body = this.fetchBody(get);
         Document doc = Jsoup.parse(body);
@@ -220,12 +217,13 @@ public class MelonAudioSourceManager implements AudioSourceManager, HttpConfigur
         Elements rows = doc.select("tr[data-song-no]");
         for (Element row : rows) {
             String songId = row.attr("data-song-no");
-            String title = row.selectFirst("div.ellipsis.rank01 a") != null
-                    ? row.selectFirst("div.ellipsis.rank01 a").text() : "";
-            String artist = row.selectFirst("div.ellipsis.rank02 span a") != null
-                    ? row.selectFirst("div.ellipsis.rank02 span a").text() : "";
-            String artwork = row.selectFirst("a.image_typeAll img") != null
-                    ? row.selectFirst("a.image_typeAll img").attr("src") : "";
+            Element titleEl = row.selectFirst("div.ellipsis.rank01 a");
+            String title = titleEl != null ? titleEl.text() : "";
+            // Artist markup occasionally omits the span wrapper, so be flexible
+            Element artistEl = row.selectFirst("div.ellipsis.rank02 a");
+            String artist = artistEl != null ? artistEl.text() : "";
+            Element imgEl = row.selectFirst("a.image_typeAll img");
+            String artwork = imgEl != null ? imgEl.attr("src") : "";
             String uri = "https://www.melon.com/song/detail.htm?songId=" + songId;
             tracks.add(createTrack(title, artist, songId, uri, artwork));
         }
@@ -251,6 +249,8 @@ public class MelonAudioSourceManager implements AudioSourceManager, HttpConfigur
         if (sessionInitialized.compareAndSet(false, true)) {
             initSession();
         }
+        // Ensure default headers are present for all requests
+        applyDefaultHeaders(httpRequest);
         CloseableHttpResponse response = httpInterfaceManager.getInterface().execute(httpRequest); // Get page data
         int statusCode = response.getStatusLine().getStatusCode();
         if (statusCode != 200) { // Not OK
@@ -264,10 +264,22 @@ public class MelonAudioSourceManager implements AudioSourceManager, HttpConfigur
 
     private void initSession() throws IOException {
         HttpGet get = new HttpGet(MELON_BASE_URL);
-        get.setHeader("User-Agent", "Mozilla/5.0");
+        applyDefaultHeaders(get);
         CloseableHttpResponse response = httpInterfaceManager.getInterface().execute(get);
         EntityUtils.consume(response.getEntity());
         response.close();
+    }
+
+    private void applyDefaultHeaders(HttpGet request) {
+        if (!request.containsHeader("User-Agent")) {
+            request.setHeader("User-Agent", "Mozilla/5.0");
+        }
+        if (!request.containsHeader("Referer")) {
+            request.setHeader("Referer", "https://www.melon.com/");
+        }
+        if (!request.containsHeader("Accept-Language")) {
+            request.setHeader("Accept-Language", "ko-KR,ko;q=0.9");
+        }
     }
 
 }
