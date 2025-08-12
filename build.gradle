@@ -1,35 +1,29 @@
 plugins {
     id "java"
-    id "application"
     id "maven-publish"
-    id "com.github.johnrengelman.shadow" version "7.1.0"
+    id "com.github.johnrengelman.shadow" version "8.1.1" // 버전 업
 }
 
 group "cafe.cocochino"
-version "0.1.0"
-mainClassName = "org.springframework.boot.loader.JarLauncher"
-sourceCompatibility = 11
+version "0.2.0"
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
 compileJava.options.encoding = "UTF-8"
 
 repositories {
     mavenCentral()
-    maven { url "https://jitpack.io" }
-
-    // Transitive dependencies
-    maven { url "https://m2.dv8tion.net/releases" }
-    jcenter()
 }
 
 dependencies {
-    compileOnly "dev.arbjerg.lavalink:plugin-api:3.6.1"
-    // It is recommended to update this version. This commit is from October 17th 2022
-    //runtimeOnly "com.github.freyacodes.lavalink:Lavalink-Server:3ead3be0"
+    compileOnly "dev.arbjerg.lavalink:plugin-api:4.1.1"
 }
 
 shadowJar {
-    def impl = project.configurations.implementation
-    impl.canBeResolved(true)
-    configurations = [impl]
+    configurations = [project.configurations.runtimeClasspath]
     archiveClassifier.set("")
 }
 
