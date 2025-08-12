@@ -35,7 +35,8 @@ public class MelonAudioSourceManager implements AudioSourceManager, HttpConfigur
     private final HttpInterfaceManager httpInterfaceManager = HttpClientTools.createDefaultThreadLocalManager();
 
     private final String sourceName = "melon";
-    private final String SEARCH_PREFIX = "melonsc:";
+    private final String SEARCH_PREFIX = "msearch:";
+    private final String PLAY_PREFIX = "mplay:";
     private final String MELON_SEARCH_URL = "https://www.melon.com/search/song/index.htm";
     private final String MELON_SONG_INFO_REGEX = "https://www\\.melon\\.com/song/detail\\.htm\\?songId=(\\d+)";
     private final Pattern melonSongPattern = Pattern.compile(MELON_SONG_INFO_REGEX);
@@ -50,9 +51,13 @@ public class MelonAudioSourceManager implements AudioSourceManager, HttpConfigur
     @Override
     public AudioItem loadItem(AudioPlayerManager manager, AudioReference reference) {
         try {
-            // melonsc:Query
+            // msearch:Query
             if (reference.identifier.startsWith(SEARCH_PREFIX)) {
                 return this.getSearch(reference.identifier.substring(SEARCH_PREFIX.length()).trim());
+            }
+            // mplay:Query
+            if (reference.identifier.startsWith(PLAY_PREFIX)) {
+                return this.getPlay(manager, reference.identifier.substring(PLAY_PREFIX.length()).trim());
             }
             // Melon URL
             Matcher matcher = melonSongPattern.matcher(reference.identifier);
@@ -111,6 +116,18 @@ public class MelonAudioSourceManager implements AudioSourceManager, HttpConfigur
         var searchResBody = this.fetchBody(searchRequest);
         log.info(searchResBody);
         return new BasicAudioPlaylist("Search results for: " + query, new ArrayList<AudioTrack>(), null, true);
+    }
+
+    private AudioItem getPlay(AudioPlayerManager manager, String query) throws Exception {
+        AudioItem searchResult = this.getSearch(query);
+        if (searchResult instanceof AudioPlaylist playlist) {
+            if (!playlist.getTracks().isEmpty()) {
+                AudioTrack firstTrack = playlist.getTracks().get(0);
+                String ytQuery = firstTrack.getInfo().title + " " + firstTrack.getInfo().author;
+                return new AudioReference("ytsearch:" + ytQuery, null);
+            }
+        }
+        return new AudioReference("ytsearch:" + query, null);
     }
 
     private AudioItem getItem(int songNumber) {
