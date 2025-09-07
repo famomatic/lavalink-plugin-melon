@@ -280,6 +280,15 @@ public class MelonAudioSourceManager implements AudioSourceManager, HttpConfigur
         if (!request.containsHeader("Accept-Language")) {
             request.setHeader("Accept-Language", "ko-KR,ko;q=0.9");
         }
+        if (!request.containsHeader("Accept")) {
+            request.setHeader("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8");
+        }
+        if (!request.containsHeader("Accept-Encoding")) {
+            request.setHeader("Accept-Encoding", "gzip, deflate, br");
+        }
+        if (!request.containsHeader("Connection")) {
+            request.setHeader("Connection", "keep-alive");
+        }
     }
 
 }
