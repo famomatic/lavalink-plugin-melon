@@ -47,6 +47,8 @@ public class MelonAudioSourceManager implements AudioSourceManager, HttpConfigur
     private final String MELON_ALBUM_INFO_REGEX = "https://www\\.melon\\.com/album/detail\\.htm\\?albumId=(\\d+)";
     private final Pattern melonSongPattern = Pattern.compile(MELON_SONG_INFO_REGEX);
     private final Pattern melonAlbumPattern = Pattern.compile(MELON_ALBUM_INFO_REGEX);
+    private final Pattern kakaoSongPattern = Pattern.compile("songId=(\\d+)");
+    private final Pattern kakaoAlbumPattern = Pattern.compile("albumId=(\\d+)");
 
     private AudioPlayerManager playerManager;
     private final AtomicBoolean sessionInitialized = new AtomicBoolean(false);
@@ -83,6 +85,11 @@ public class MelonAudioSourceManager implements AudioSourceManager, HttpConfigur
             matcher = melonAlbumPattern.matcher(reference.identifier);
             if (matcher.find() && !matcher.group(1).equals("")) {
                 return this.getAlbum(Integer.parseInt(matcher.group(1)));
+            }
+
+            // Kakao share links
+            if (reference.identifier.contains("kko.kakao.com")) {
+                return this.getKakaoItem(reference.identifier);
             }
         } catch (Exception exception) {
             throw new RuntimeException(exception);
@@ -189,6 +196,27 @@ public class MelonAudioSourceManager implements AudioSourceManager, HttpConfigur
                 doc.selectFirst("meta[property=og:title]").attr("content") : "Album " + albumNumber;
         List<AudioTrack> tracks = parseTrackRows(doc);
         return new BasicAudioPlaylist(title, tracks, null, false);
+    }
+
+    private AudioItem getKakaoItem(String url) throws Exception {
+        HttpGet get = new HttpGet(url);
+        applyDefaultHeaders(get);
+
+        var body = this.fetchBody(get);
+        Document doc = Jsoup.parse(body);
+        Element ogUrl = doc.selectFirst("meta[property=og:url]");
+        if (ogUrl != null) {
+            String target = ogUrl.attr("content");
+            Matcher matcher = kakaoSongPattern.matcher(target);
+            if (matcher.find()) {
+                return this.getItem(Integer.parseInt(matcher.group(1)));
+            }
+            matcher = kakaoAlbumPattern.matcher(target);
+            if (matcher.find()) {
+                return this.getAlbum(Integer.parseInt(matcher.group(1)));
+            }
+        }
+        return null;
     }
 
     private AudioTrack parseTrackFromDetails(String detailsHtml, int songNumber, String url) {
