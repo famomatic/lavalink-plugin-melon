@@ -184,33 +184,45 @@ public class MelonAudioSourceManager implements AudioSourceManager, HttpConfigur
 
     private AudioTrack parseTrackFromDetails(String detailsHtml, int songNumber, String url) {
         Document doc = Jsoup.parse(detailsHtml);
-        String title = doc.selectFirst("meta[property=og:title]") != null ?
-                doc.selectFirst("meta[property=og:title]").attr("content") : "";
+
+        // Prefer page elements for clean title/artist information
+        String title = "";
+        Element titleEl = doc.selectFirst("div.song_name");
+        if (titleEl != null) {
+            title = titleEl.ownText().trim();
+        }
+
         String artist = "";
-        Element artistMeta = doc.selectFirst("meta[property=og:author]");
-        if (artistMeta != null) {
-            artist = artistMeta.attr("content");
-        } else {
-            Element desc = doc.selectFirst("meta[property=og:description]");
-            if (desc != null) {
-                String content = desc.attr("content");
-                int idx = content.indexOf("|");
-                if (idx > 0) {
-                    artist = content.substring(0, idx).trim();
-                } else {
-                    artist = content;
+        Element artistEl = doc.selectFirst("div.artist a.artist_name");
+        if (artistEl == null) {
+            artistEl = doc.selectFirst("div.profile-common .user-name");
+        }
+        if (artistEl != null) {
+            artist = artistEl.text().trim();
+        }
+
+        // Fallback to meta tags when elements are missing
+        if (title.isEmpty()) {
+            Element metaTitle = doc.selectFirst("meta[property=og:title]");
+            if (metaTitle != null) {
+                title = metaTitle.attr("content");
+            }
+        }
+
+        if (artist.isEmpty()) {
+            Element artistMeta = doc.selectFirst("meta[property=og:author]");
+            if (artistMeta != null) {
+                artist = artistMeta.attr("content");
+            } else {
+                Element desc = doc.selectFirst("meta[property=og:description]");
+                if (desc != null) {
+                    String content = desc.attr("content");
+                    int idx = content.indexOf("|");
+                    artist = idx > 0 ? content.substring(0, idx).trim() : content;
                 }
             }
         }
-        if (artist.isEmpty()) {
-            Element artistEl = doc.selectFirst("div.artist a.artist_name");
-            if (artistEl == null) {
-                artistEl = doc.selectFirst("div.profile-common .user-name");
-            }
-            if (artistEl != null) {
-                artist = artistEl.text().trim();
-            }
-        }
+
         String artwork = doc.selectFirst("meta[property=og:image]") != null ?
                 doc.selectFirst("meta[property=og:image]").attr("content") : "";
         return createTrack(title, artist, String.valueOf(songNumber), url, artwork);
