@@ -137,7 +137,10 @@ public class MelonAudioSourceManager implements AudioSourceManager, HttpConfigur
     private AudioItem getSearch(String query) throws Exception {
         HttpGet searchRequest = new HttpGet(MELON_SEARCH_URL);
         URI qs = new URIBuilder(searchRequest.getURI())
-                .setParameter("q", query)
+                // Updated parameters to match Melon's current search API
+                .setParameter("kwd", query)
+                .setParameter("section", "song")
+                .setParameter("searchGnbYn", "Y")
                 .build();
         searchRequest.setURI(qs);
         applyDefaultHeaders(searchRequest);
@@ -242,11 +245,19 @@ public class MelonAudioSourceManager implements AudioSourceManager, HttpConfigur
         Elements rows = doc.select("tr[data-song-no]");
         for (Element row : rows) {
             String songId = row.attr("data-song-no");
-            Element titleEl = row.selectFirst("div.ellipsis.rank01 a");
+
+            Element titleEl = row.selectFirst("div.ellipsis.rank01 a, div.ellipsis.rank01 span a");
             String title = titleEl != null ? titleEl.text() : "";
+
             // Artist markup occasionally omits the span wrapper, so be flexible
-            Element artistEl = row.selectFirst("div.ellipsis.rank02 a");
+            Element artistEl = row.selectFirst("div.ellipsis.rank02 a, div.ellipsis.rank02 span a");
             String artist = artistEl != null ? artistEl.text() : "";
+
+            // Skip rows without essential info to avoid bad search queries
+            if (title.isEmpty() || artist.isEmpty()) {
+                continue;
+            }
+
             Element imgEl = row.selectFirst("a.image_typeAll img");
             String artwork = imgEl != null ? imgEl.attr("src") : "";
             String uri = "https://www.melon.com/song/detail.htm?songId=" + songId;
