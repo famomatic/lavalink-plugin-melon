@@ -149,14 +149,20 @@ public class MelonAudioSourceManager implements AudioSourceManager, HttpConfigur
 
     private AudioItem getPlay(AudioPlayerManager manager, String query) throws Exception {
         AudioItem searchResult = this.getSearch(query);
-        if (searchResult instanceof AudioPlaylist playlist) {
-            if (!playlist.getTracks().isEmpty()) {
-                AudioTrack firstTrack = playlist.getTracks().get(0);
-                String ytQuery = firstTrack.getInfo().title + " " + firstTrack.getInfo().author;
-                return new AudioReference("ytsearch:" + ytQuery, null);
-            }
+        String ytQuery = query;
+
+        if (searchResult instanceof AudioPlaylist playlist && !playlist.getTracks().isEmpty()) {
+            AudioTrack firstTrack = playlist.getTracks().get(0);
+            ytQuery = firstTrack.getInfo().title + " " + firstTrack.getInfo().author;
         }
-        return new AudioReference("ytsearch:" + query, null);
+
+        AudioItem ytResult = manager.loadItemSync("ytsearch:" + ytQuery);
+
+        if (ytResult instanceof AudioPlaylist ytPlaylist && !ytPlaylist.getTracks().isEmpty()) {
+            return ytPlaylist.getTracks().get(0);
+        }
+
+        return ytResult;
     }
 
     private AudioItem getItem(int songNumber) throws Exception {
