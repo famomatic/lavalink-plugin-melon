@@ -11,7 +11,6 @@ import org.apache.http.HttpEntity;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
-import org.apache.http.client.utils.URIBuilder;
 import org.apache.http.impl.client.BasicCookieStore;
 import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.util.EntityUtils;
@@ -25,7 +24,6 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
-import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -39,9 +37,7 @@ public class MelonAudioSourceManager implements AudioSourceManager, HttpConfigur
     private final HttpInterfaceManager httpInterfaceManager = HttpClientTools.createDefaultThreadLocalManager();
 
     private final String sourceName = "melon";
-    private final String SEARCH_PREFIX = "msearch:";
     private final String PLAY_PREFIX = "mplay:";
-    private final String MELON_SEARCH_URL = "https://www.melon.com/search/song/index.htm";
     private final String MELON_BASE_URL = "https://www.melon.com/";
     private final String MELON_SONG_INFO_REGEX = "https://www\\.melon\\.com/song/detail\\.htm\\?songId=(\\d+)";
     private final String MELON_ALBUM_INFO_REGEX = "https://www\\.melon\\.com/album/detail\\.htm\\?albumId=(\\d+)";
@@ -67,10 +63,6 @@ public class MelonAudioSourceManager implements AudioSourceManager, HttpConfigur
     public AudioItem loadItem(AudioPlayerManager manager, AudioReference reference) {
         try {
             this.playerManager = manager;
-            // msearch:Query
-            if (reference.identifier.startsWith(SEARCH_PREFIX)) {
-                return this.getSearch(reference.identifier.substring(SEARCH_PREFIX.length()).trim());
-            }
             // mplay:Query
             if (reference.identifier.startsWith(PLAY_PREFIX)) {
                 return this.getPlay(manager, reference.identifier.substring(PLAY_PREFIX.length()).trim());
@@ -141,32 +133,8 @@ public class MelonAudioSourceManager implements AudioSourceManager, HttpConfigur
     }
 
 
-    private AudioItem getSearch(String query) throws Exception {
-        HttpGet searchRequest = new HttpGet(MELON_SEARCH_URL);
-        URI qs = new URIBuilder(searchRequest.getURI())
-                // Updated parameters to match Melon's current search API
-                .setParameter("kwd", query)
-                .setParameter("section", "song")
-                .setParameter("searchGnbYn", "Y")
-                .build();
-        searchRequest.setURI(qs);
-        applyDefaultHeaders(searchRequest);
-
-        var searchResBody = this.fetchBody(searchRequest);
-        List<AudioTrack> tracks = parseSearchResults(searchResBody);
-        return new BasicAudioPlaylist("Search results for: " + query, tracks, null, true);
-    }
-
-    private AudioItem getPlay(AudioPlayerManager manager, String query) throws Exception {
-        AudioItem searchResult = this.getSearch(query);
-        String ytQuery = query;
-
-        if (searchResult instanceof AudioPlaylist playlist && !playlist.getTracks().isEmpty()) {
-            AudioTrack firstTrack = playlist.getTracks().get(0);
-            ytQuery = firstTrack.getInfo().title + " " + firstTrack.getInfo().author;
-        }
-
-        AudioItem ytResult = manager.loadItemSync("ytsearch:" + ytQuery);
+    private AudioItem getPlay(AudioPlayerManager manager, String query) {
+        AudioItem ytResult = manager.loadItemSync("ytsearch:" + query);
 
         if (ytResult instanceof AudioPlaylist ytPlaylist && !ytPlaylist.getTracks().isEmpty()) {
             return ytPlaylist.getTracks().get(0);
@@ -261,11 +229,6 @@ public class MelonAudioSourceManager implements AudioSourceManager, HttpConfigur
         String artwork = doc.selectFirst("meta[property=og:image]") != null ?
                 doc.selectFirst("meta[property=og:image]").attr("content") : "";
         return createTrack(title, artist, String.valueOf(songNumber), url, artwork);
-    }
-
-    private List<AudioTrack> parseSearchResults(String searchResultHtml) {
-        Document doc = Jsoup.parse(searchResultHtml);
-        return parseTrackRows(doc);
     }
 
     private List<AudioTrack> parseTrackRows(Document doc) {

@@ -5,7 +5,6 @@ English | [한국어](README.ko.md)
 This project provides a [Lavalink](https://github.com/lavalink-devs/Lavalink) plugin that adds support for playing tracks from [Melon](https://www.melon.com/).
 
 ## Features
-- Search Melon using the `msearch:` prefix (e.g. `msearch:아이유`)
 - Play the most relevant YouTube result via the `mplay:` prefix
 - Load tracks directly from Melon song URLs
 
