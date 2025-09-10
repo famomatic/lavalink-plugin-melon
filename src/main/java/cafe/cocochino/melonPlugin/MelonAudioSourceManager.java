@@ -202,10 +202,15 @@ public class MelonAudioSourceManager implements AudioSourceManager, HttpConfigur
         }
 
         // Fallback to meta tags when elements are missing
-        if (title.isEmpty()) {
-            Element metaTitle = doc.selectFirst("meta[property=og:title]");
-            if (metaTitle != null) {
-                title = metaTitle.attr("content");
+        Element metaTitle = doc.selectFirst("meta[property=og:title]");
+        if ((title.isEmpty() || artist.isEmpty()) && metaTitle != null) {
+            String content = metaTitle.attr("content");
+            String[] parts = content.split(" - ", 2);
+            if (title.isEmpty()) {
+                title = parts[0].trim();
+            }
+            if (artist.isEmpty() && parts.length > 1) {
+                artist = parts[1].trim();
             }
         }
 
@@ -213,13 +218,6 @@ public class MelonAudioSourceManager implements AudioSourceManager, HttpConfigur
             Element artistMeta = doc.selectFirst("meta[property=og:author]");
             if (artistMeta != null) {
                 artist = artistMeta.attr("content");
-            } else {
-                Element desc = doc.selectFirst("meta[property=og:description]");
-                if (desc != null) {
-                    String content = desc.attr("content");
-                    int idx = content.indexOf("|");
-                    artist = idx > 0 ? content.substring(0, idx).trim() : content;
-                }
             }
         }
 
