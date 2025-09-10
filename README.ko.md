@@ -5,7 +5,6 @@
 이 프로젝트는 [Lavalink](https://github.com/lavalink-devs/Lavalink)용 플러그인으로, [멜론](https://www.melon.com/)의 트랙 재생을 지원합니다.
 
 ## 기능
-- `msearch:` 접두사를 사용해 멜론에서 검색 (예: `msearch:아이유`)
 - `mplay:` 접두사를 통해 가장 관련성 높은 YouTube 결과 재생
 - 멜론 곡 URL을 직접 로드
 
