@@ -202,6 +202,15 @@ public class MelonAudioSourceManager implements AudioSourceManager, HttpConfigur
                 }
             }
         }
+        if (artist.isEmpty()) {
+            Element artistEl = doc.selectFirst("div.artist a.artist_name");
+            if (artistEl == null) {
+                artistEl = doc.selectFirst("div.profile-common .user-name");
+            }
+            if (artistEl != null) {
+                artist = artistEl.text().trim();
+            }
+        }
         String artwork = doc.selectFirst("meta[property=og:image]") != null ?
                 doc.selectFirst("meta[property=og:image]").attr("content") : "";
         return createTrack(title, artist, String.valueOf(songNumber), url, artwork);
